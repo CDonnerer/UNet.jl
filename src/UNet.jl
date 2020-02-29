@@ -22,16 +22,16 @@ function crop(original, desired)
     desired_h, desired_w = size(desired)
     original_h, original_w = size(original)
 
-    delta_h = convert(Int8, (original_h - desired_h) / 2)
-    delta_w = convert(Int8, (original_w - desired_w) / 2)
+    delta_h = convert(Int8, (original_h - desired_h) ÷ 2)
+    delta_w = convert(Int8, (original_w - desired_w) ÷ 2)
 
     return original[
-        1+delta_h:original_h-delta_h,
-        1+delta_w:original_w-delta_w,
+        1+delta_h:delta_h+desired_h,
+        1+delta_w:delta_w+desired_w,
         :, :]
 end
 
-struct CoppedSkipConnection
+struct CroppedSkipConnection
     layers
     connection
 end
@@ -41,54 +41,72 @@ end
 function (skip::CroppedSkipConnection)(input)
     output = skip.layers(input)
     cropped_input = crop(input, output)
-    return skip.connection(output, cropped_input)
+    return cat(output, cropped_input, dims=3)
 end
 
 
-model = Chain(
-    Conv((2,2), 3=>6, relu, pad=(0, 0), stride=(1, 1)),
-    UpSample((2,2))
+depth_4 = Chain(
+    MaxPool((2,2)),
+    Conv((3,3), 512=>1024, relu, pad=(0,0), stride=(1,1)),
+    Conv((3,3), 1024=>1024, relu, pad=(0,0), stride=(1,1)),
+    UpSample((2,2)),
+    Conv((1,1), 1024=>512, relu, pad=(0,0), stride=(1,1)),
 )
 
-img = reshape(
-    [1 1 1 1 0 0 0 0 0 0 0 0], 2, 2, 3, 1
+depth_3 = Chain(
+    MaxPool((2,2)),
+    Conv((3,3), 256=>512, relu, pad=(0,0), stride=(1,1)),
+    Conv((3,3), 512=>512, relu, pad=(0,0), stride=(1,1)),
+
+    CroppedSkipConnection(depth_4, +),
+    Conv((3,3), 1024=>512, relu, pad=(0,0), stride=(1,1)),
+
+    Conv((3,3), 512=>512, relu, pad=(0,0), stride=(1,1)),
+    UpSample((2,2)),
+    Conv((1,1), 512=>256, relu, pad=(0,0), stride=(1,1)),
 )
 
-conv_img = model(img)
-
-
-
-drop4 = Chain(
-    Conv((3,3), 3=>64, relu, pad=(1, 1), stride=(1, 1)),
-    Conv((3,3), 3=>64, relu, pad=(1, 1), stride=(1, 1)),
+depth_2 = Chain(
     MaxPool((2,2)),
+    Conv((3,3), 128=>256, relu, pad=(0,0), stride=(1,1)),
+    Conv((3,3), 256=>256, relu, pad=(0,0), stride=(1,1)),
 
-    Conv((3,3), 64=>128, relu, pad=(1, 1), stride=(1, 1)),
-    Conv((3,3), 64=>128, relu, pad=(1, 1), stride=(1, 1)),
-    MaxPool((2,2)),
+    CroppedSkipConnection(depth_3, +),
+    Conv((3,3), 512=>256, relu, pad=(0,0), stride=(1,1)),
 
-    Conv((3,3), 128=>256, relu, pad=(1, 1), stride=(1, 1)),
-    Conv((3,3), 128=>256, relu, pad=(1, 1), stride=(1, 1)),
-    MaxPool((2,2)),
-
-    Conv((3,3),256=>512, relu, pad=(1, 1), stride=(1, 1)),
-    Conv((3,3), 256=>512, relu, pad=(1, 1), stride=(1, 1)),
-    Dropout(0.5),
+    Conv((3,3), 256=>256, relu, pad=(0,0), stride=(1,1)),
+    UpSample((2,2)),
+    Conv((1,1), 256=>128, relu, pad=(0,0), stride=(1,1)),
 )
 
-up6 = Chain(
+depth_1 = Chain(
     MaxPool((2,2)),
-    Conv((3,3),512=>1024, relu, pad=(1, 1), stride=(1, 1)),
-    Conv((3,3), 1024=>1024, relu, pad=(1, 1), stride=(1, 1)),
-    Dropout(0.5),
-    UpSample((2,2))
-    Conv((2,2), 1024=>512)
+    Conv((3,3), 64=>128, relu, pad=(0,0), stride=(1,1)),
+    Conv((3,3), 128=>128, relu, pad=(0,0), stride=(1,1)),
+
+    CroppedSkipConnection(depth_2, +),
+    Conv((3,3), 256=>128, relu, pad=(0,0), stride=(1,1)),
+
+    Conv((3,3), 128=>128, relu, pad=(0,0), stride=(1,1)),
+    UpSample((2,2)),
+    Conv((1,1), 128=>64, relu, pad=(0,0), stride=(1,1)),
 )
 
 unet = Chain(
-    drop4,
-    SkipConnection(up6, +)
+    Conv((3,3), 1=>64, relu, pad=(0,0), stride=(1,1)),
+    Conv((3,3), 64=>64, relu, pad=(0,0), stride=(1,1)),
 
+    CroppedSkipConnection(depth_1, +),
+
+    Conv((3,3), 128=>64, relu, pad=(0,0), stride=(1,1)),
+    Conv((3,3), 64=>64, relu, pad=(0,0), stride=(1,1)),
+    Conv((3,3), 64=>64, relu, pad=(0,0), stride=(1,1)),
+
+    Conv((3,3), 64=>2, relu, pad=(0,0), stride=(1,1)),
+    Conv((3,3), 2=>1, sigmoid, pad=(0,0), stride=(1,1)),
 )
+
+img = rand(256, 256, 1, 1)
+seg = unet(img)
 
 end # module
