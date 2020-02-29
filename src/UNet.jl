@@ -18,8 +18,36 @@ function (up::UpSample)(input)
   return reshape(z, size(input) .* ratio)
 end
 
+function crop(original, desired)
+    desired_h, desired_w = size(desired)
+    original_h, original_w = size(original)
+
+    delta_h = convert(Int8, (original_h - desired_h) / 2)
+    delta_w = convert(Int8, (original_w - desired_w) / 2)
+
+    return original[
+        1+delta_h:original_h-delta_h,
+        1+delta_w:original_w-delta_w,
+        :, :]
+end
+
+struct CoppedSkipConnection
+    layers
+    connection
+end
+
+@treelike CroppedSkipConnection
+
+function (skip::CroppedSkipConnection)(input)
+    output = skip.layers(input)
+    cropped_input = crop(input, output)
+    return skip.connection(output, cropped_input)
+end
+
+
 model = Chain(
-    UpSample((1,1))
+    Conv((2,2), 3=>6, relu, pad=(0, 0), stride=(1, 1)),
+    UpSample((2,2))
 )
 
 img = reshape(
