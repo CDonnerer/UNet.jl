@@ -49,21 +49,23 @@ depth_4 = Chain(
     MaxPool((2,2)),
     Conv((3,3), 512=>1024, relu, pad=(0,0), stride=(1,1)),
     Conv((3,3), 1024=>1024, relu, pad=(0,0), stride=(1,1)),
+    Dropout(0.5),
     UpSample((2,2)),
-    Conv((1,1), 1024=>512, relu, pad=(0,0), stride=(1,1)),
+    Conv((1,1), 1024=>512, pad=(0,0), stride=(1,1)),
 )
 
 depth_3 = Chain(
     MaxPool((2,2)),
     Conv((3,3), 256=>512, relu, pad=(0,0), stride=(1,1)),
     Conv((3,3), 512=>512, relu, pad=(0,0), stride=(1,1)),
+    Dropout(0.5),
 
     CroppedSkipConnection(depth_4, +),
     Conv((3,3), 1024=>512, relu, pad=(0,0), stride=(1,1)),
 
     Conv((3,3), 512=>512, relu, pad=(0,0), stride=(1,1)),
     UpSample((2,2)),
-    Conv((1,1), 512=>256, relu, pad=(0,0), stride=(1,1)),
+    Conv((1,1), 512=>256, pad=(0,0), stride=(1,1)),
 )
 
 depth_2 = Chain(
@@ -76,7 +78,7 @@ depth_2 = Chain(
 
     Conv((3,3), 256=>256, relu, pad=(0,0), stride=(1,1)),
     UpSample((2,2)),
-    Conv((1,1), 256=>128, relu, pad=(0,0), stride=(1,1)),
+    Conv((1,1), 256=>128, pad=(0,0), stride=(1,1)),
 )
 
 depth_1 = Chain(
@@ -89,7 +91,7 @@ depth_1 = Chain(
 
     Conv((3,3), 128=>128, relu, pad=(0,0), stride=(1,1)),
     UpSample((2,2)),
-    Conv((1,1), 128=>64, relu, pad=(0,0), stride=(1,1)),
+    Conv((1,1), 128=>64, pad=(0,0), stride=(1,1)),
 )
 
 unet = Chain(
@@ -100,13 +102,72 @@ unet = Chain(
 
     Conv((3,3), 128=>64, relu, pad=(0,0), stride=(1,1)),
     Conv((3,3), 64=>64, relu, pad=(0,0), stride=(1,1)),
-    Conv((3,3), 64=>64, relu, pad=(0,0), stride=(1,1)),
 
-    Conv((3,3), 64=>2, relu, pad=(0,0), stride=(1,1)),
-    Conv((3,3), 2=>1, sigmoid, pad=(0,0), stride=(1,1)),
+    Conv((1,1), 64=>1, pad=(0,0), stride=(1,1)),
+
+    # Reshape 3d tensor into a 2d one, at this point it should be (3, 3, 32, N)
+    # which is where we get the 288 in the `Dense` layer below:
+    #x -> reshape(x, :, size(x, 4)),
+
+    # Finally, softmax to get nice probabilities
+    x -> sigmoid.(x)
 )
 
-img = rand(256, 256, 1, 1)
-seg = unet(img)
+# img = rand(256, 256, 1, 1)
+# seg = unet(img)
+
+using Images
+using FileIO
+
+
+function load_img_array(path)
+    img = load(path)
+    reshape(convert(Array{Float32}, img), size(img) ..., 1, 1)
+end
+
+img = load_img_array("data/membrane/train/image/0.png")
+label = load_img_array("data/membrane/train/label/0.png")
+
+my_img = load("data/membrane/train/image/0.png")
+
+# 256 input
+# 68 label
+
+X_train = img[1:256, 1:256, :, :]
+y_train = label[96:161, 96:161, :, :]
+
+dataset = [(X_train, y_train)]
+
+y_pred = unet(X_train)
+
+Flux.crossentropy(y_pred, reshape(y_train, 4356))
+
+# `loss()` calculates the crossentropy loss between our prediction `y_hat`
+# (calculated from `model(x)`) and the ground truth `y`.  We augment the data
+# a bit, adding gaussian random noise to our image to make it more robust.
+function loss(x, y)
+    # We augment `x` a little bit here, adding in random noise
+    x_aug = x .+ 0.1f0*randn(eltype(x), size(x))
+    y_hat = unet(x_aug)
+    return crossentropy(y_hat, reshape(y, size(y)))
+end
+
+
+opt = ADAM()
+
+using Flux: throttle, params, crossentropy
+using Juno: @progress
+
+@progress for i = 1:20
+  @info "Epoch $i"
+  Flux.train!(loss, params(unet), dataset, opt)
+end
+
+y_pred = reshape(unet(X_train), 68, 68)
+
+
+f(x) = exp.(x) ./ sum(exp.(x))
+
+f([1, 2, 3])
 
 end # module
