@@ -104,12 +104,12 @@ unet = Chain(
     Conv((3,3), 64=>64, relu, pad=(0,0), stride=(1,1)),
 
     Conv((1,1), 64=>1, pad=(0,0), stride=(1,1)),
-
     # Reshape 3d tensor into a 2d one, at this point it should be (3, 3, 32, N)
     # which is where we get the 288 in the `Dense` layer below:
     #x -> reshape(x, :, size(x, 4)),
 
     # Finally, softmax to get nice probabilities
+    BatchNorm(1),
     x -> sigmoid.(x)
 )
 
@@ -128,46 +128,40 @@ end
 img = load_img_array("data/membrane/train/image/0.png")
 label = load_img_array("data/membrane/train/label/0.png")
 
-my_img = load("data/membrane/train/image/0.png")
-
 # 256 input
 # 68 label
 
 X_train = img[1:256, 1:256, :, :]
-y_train = label[96:161, 96:161, :, :]
+y_train = label[95:162, 95:162, :, :]
 
 dataset = [(X_train, y_train)]
 
 y_pred = unet(X_train)
 
-Flux.crossentropy(y_pred, reshape(y_train, 4356))
-
-# `loss()` calculates the crossentropy loss between our prediction `y_hat`
-# (calculated from `model(x)`) and the ground truth `y`.  We augment the data
-# a bit, adding gaussian random noise to our image to make it more robust.
-function loss(x, y)
-    # We augment `x` a little bit here, adding in random noise
-    x_aug = x .+ 0.1f0*randn(eltype(x), size(x))
-    y_hat = unet(x_aug)
-    return crossentropy(y_hat, reshape(y, size(y)))
-end
-
+loss(x, y) = Flux.crossentropy(
+    reshape(unet(x), size(y)[1]^2), reshape(y, size(y)[1]^2),
+)
 
 opt = ADAM()
 
 using Flux: throttle, params, crossentropy
 using Juno: @progress
 
-@progress for i = 1:20
+@progress for i = 1:50
   @info "Epoch $i"
   Flux.train!(loss, params(unet), dataset, opt)
 end
 
-y_pred = reshape(unet(X_train), 68, 68)
 
+function plot_y(y)
+    convert(
+        Array{Gray{Normed{UInt8,8}},2},
+        reshape(y.data, 68, 68)
+    )
+end
 
-f(x) = exp.(x) ./ sum(exp.(x))
+y_pred = unet(X_train)
+plot_y(y_pred)
 
-f([1, 2, 3])
 
 end # module
