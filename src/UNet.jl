@@ -3,6 +3,8 @@ module UNet
 using Flux
 using Flux: @treelike
 
+export unet
+
 struct UpSample
   ratio
 end
