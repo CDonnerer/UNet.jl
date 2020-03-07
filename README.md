@@ -7,7 +7,7 @@ UNet implementation for image segmentation in Julia build on top of the [Flux](h
 ```julia
 using UNet
 
-# Create dummy image data (single gray channel)
+# Create dummy image data (single channel gray image)
 X = rand(Float32, 224, 224, 1, 1)
 256×256×1×1 Array{Float32,4}:
 
