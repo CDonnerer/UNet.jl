@@ -43,7 +43,7 @@ end
 function (skip::CroppedSkipConcat)(input)
     output = skip.layers(input)
     cropped_input = crop(input, output)
-    return cat(output, cropped_input, dims=3)
+    return cat(output, cropped_input, dims=skip.concat_axis)
 end
 
 
@@ -60,7 +60,7 @@ depth_3 = Chain(
     Conv((3,3), 256=>512, relu, pad=(0,0), stride=(1,1)),
     Conv((3,3), 512=>512, relu, pad=(0,0), stride=(1,1)),
 
-    CroppedSkipConcat(depth_4, +),
+    CroppedSkipConcat(depth_4, 3),
     Conv((3,3), 1024=>512, relu, pad=(0,0), stride=(1,1)),
 
     Conv((3,3), 512=>512, relu, pad=(0,0), stride=(1,1)),
@@ -73,7 +73,7 @@ depth_2 = Chain(
     Conv((3,3), 128=>256, relu, pad=(0,0), stride=(1,1)),
     Conv((3,3), 256=>256, relu, pad=(0,0), stride=(1,1)),
 
-    CroppedSkipConcat(depth_3, +),
+    CroppedSkipConcat(depth_3, 3),
     Conv((3,3), 512=>256, relu, pad=(0,0), stride=(1,1)),
 
     Conv((3,3), 256=>256, relu, pad=(0,0), stride=(1,1)),
@@ -86,7 +86,7 @@ depth_1 = Chain(
     Conv((3,3), 64=>128, relu, pad=(0,0), stride=(1,1)),
     Conv((3,3), 128=>128, relu, pad=(0,0), stride=(1,1)),
 
-    CroppedSkipConcat(depth_2, +),
+    CroppedSkipConcat(depth_2, 3),
     Conv((3,3), 256=>128, relu, pad=(0,0), stride=(1,1)),
 
     Conv((3,3), 128=>128, relu, pad=(0,0), stride=(1,1)),
@@ -98,7 +98,7 @@ unet = Chain(
     Conv((3,3), 1=>64, relu, pad=(0,0), stride=(1,1)),
     Conv((3,3), 64=>64, relu, pad=(0,0), stride=(1,1)),
 
-    CroppedSkipConcat(depth_1, +),
+    CroppedSkipConcat(depth_1, 3),
 
     Conv((3,3), 128=>64, relu, pad=(0,0), stride=(1,1)),
     Conv((3,3), 64=>64, relu, pad=(0,0), stride=(1,1)),
