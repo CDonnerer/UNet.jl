@@ -33,20 +33,6 @@ function crop(original, desired)
         :, :]
 end
 
-
-struct CroppedSkipConcat
-    layers
-    concat_axis
-end
-
-@treelike CroppedSkipConcat
-
-function (skip::CroppedSkipConcat)(input)
-    output = skip.layers(input)
-    cropped_input = crop(input, output)
-    return cat(output, cropped_input, dims=skip.concat_axis)
-end
-
 depth_4 = Chain(
     MaxPool((2,2)),
     Conv((3,3), 512=>1024, relu, pad=(0,0), stride=(1,1)),
@@ -60,8 +46,7 @@ depth_3 = Chain(
     Conv((3,3), 256=>512, relu, pad=(0,0), stride=(1,1)),
     Conv((3,3), 512=>512, relu, pad=(0,0), stride=(1,1)),
 
-    CroppedSkipConcat(depth_4, 3),
-    #SkipConnection(depth_4, (mx, x) -> cat(mx, crop(x, mx), dims=3)),
+    SkipConnection(depth_4, (mx, x) -> cat(mx, crop(x, mx), dims=3)),
     Conv((3,3), 1024=>512, relu, pad=(0,0), stride=(1,1)),
 
     Conv((3,3), 512=>512, relu, pad=(0,0), stride=(1,1)),
@@ -74,8 +59,7 @@ depth_2 = Chain(
     Conv((3,3), 128=>256, relu, pad=(0,0), stride=(1,1)),
     Conv((3,3), 256=>256, relu, pad=(0,0), stride=(1,1)),
 
-    CroppedSkipConcat(depth_3, 3),
-    # SkipConnection(depth_3, (mx, x) -> cat(mx, crop(x, mx), dims=3)),
+    SkipConnection(depth_3, (mx, x) -> cat(mx, crop(x, mx), dims=3)),
     Conv((3,3), 512=>256, relu, pad=(0,0), stride=(1,1)),
 
     Conv((3,3), 256=>256, relu, pad=(0,0), stride=(1,1)),
@@ -88,8 +72,7 @@ depth_1 = Chain(
     Conv((3,3), 64=>128, relu, pad=(0,0), stride=(1,1)),
     Conv((3,3), 128=>128, relu, pad=(0,0), stride=(1,1)),
 
-    CroppedSkipConcat(depth_2, 3),
-    #SkipConnection(depth_2, (mx, x) -> cat(mx, crop(x, mx), dims=3)),
+    SkipConnection(depth_2, (mx, x) -> cat(mx, crop(x, mx), dims=3)),
     Conv((3,3), 256=>128, relu, pad=(0,0), stride=(1,1)),
 
     Conv((3,3), 128=>128, relu, pad=(0,0), stride=(1,1)),
@@ -101,8 +84,7 @@ unet = Chain(
     Conv((3,3), 1=>64, relu, pad=(0,0), stride=(1,1)),
     Conv((3,3), 64=>64, relu, pad=(0,0), stride=(1,1)),
 
-    CroppedSkipConcat(depth_1, 3),
-    #SkipConnection(depth_1, (mx, x) -> cat(mx, crop(x, mx), dims=3)),
+    SkipConnection(depth_1, (mx, x) -> cat(mx, crop(x, mx), dims=3)),
 
     Conv((3,3), 128=>64, relu, pad=(0,0), stride=(1,1)),
     Conv((3,3), 64=>64, relu, pad=(0,0), stride=(1,1)),

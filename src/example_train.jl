@@ -3,7 +3,6 @@
 using Images
 using FileIO
 
-using Flux: throttle, params, crossentropy
 using Juno: @progress
 
 
@@ -41,11 +40,6 @@ loss(x, y) = Flux.crossentropy(
 
 y_pred = unet(X)
 
-one = reshape(unet(X), size(y)[1]^2)
-two = reshape(y, size(y)[1]^2)
-
-Flux.crossentropy(one, two)
-
 loss(X, y)
 
 opt = ADAM(0.0003)
@@ -74,12 +68,7 @@ end
 
 using JLD2
 @load "unet_weights.jld2" weights
-
-untracked_weights = data.(weights.params)
-
-using Flux
-Flux.loadparams!(unet, untracked_weights)
-
+Flux.loadparams!(unet, weights)
 
 
 X, y = get_Xy_train(18)
