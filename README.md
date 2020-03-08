@@ -2,6 +2,10 @@
 
 UNet implementation for image segmentation in Julia build on top of the [Flux](http://fluxml.github.io/) library.
 
+## Requirements
+
+Please note that this package requires Flux v0.9.0. This arises from the "Up convolution" layers, which here is coded through an `UpSample` layer that mutates arrays, which is not supported in later versions of Flux (>v0.10.0) due to the dependence on Zygote.
+
 ## Eample usage
 
 ```julia
