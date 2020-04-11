@@ -1,78 +1,71 @@
-# An example of how you can train this UNet and do inference
-
-using Images
-using FileIO
+# Example script of how you can train this UNet and do inference
+using Images, FileIO, JLD2, Flux, UNet
 
 using Juno: @progress
 
 
-function load_img_array(path)
-    img = load(path)
-    reshape(convert(Array{Float32}, img), size(img) ..., 1, 1)
+function check_img_size(img)
+    # checks that image size is compatible with the unet
+    height, width = size(img)
+    if (height - 4) % 16 != 0
+        throw(BoundsError())
+    end
 end
 
-function get_Xy_train(number)
+function load_img_label(number, crop=500)
     train_path = "data/membrane/train/"
+    img_path = train_path*"image/"*string(number)*".png"
+    label_path = train_path*"label/"*string(number)*".png"
 
-    img = load_img_array(train_path*"image/"*string(number)*".png")
-    label = load_img_array(train_path*"label/"*string(number)*".png")
-    return img[1:256, 1:256, :, :], label[95:162, 95:162, :, :]
-    # use the below for larger size of input/ output
-    #return img[1:512, 1:512, :, :], label[95:418, 95:418, :, :]
+    img = load(img_path)[1:crop, 1:crop]
+    label = load(label_path)[1:crop, 1:crop]
+    check_img_size(img)
+
+    return img, label
 end
 
 
+# ---------------------------------------------
+# Train a new model
+# ---------------------------------------------
+
+# build up dataset for training
 dataset = []
-for i = 0:2
-    X, y = get_Xy_train(i)
-    push!(dataset, (X,y))
+for i = 0:20
+    img, label = load_img_label(i, 340)
+    X = img2array(unet_tiling(img))
+    y = img2array(label)
+    push!(dataset, (X, y))
 end
-
-X, y = get_Xy_train(18)
-
-X = rand(256, 256, 1, 1)
-y = rand(68, 68, 1, 1)
-dataset = [(X, y)]
 
 loss(x, y) = Flux.crossentropy(
     reshape(unet(x), size(y)[1]^2), reshape(y, size(y)[1]^2),
 )
+opt = Flux.ADAM(1e-4)
 
-y_pred = unet(X)
+# get a validation datapoint
+img, label = load_img_label(25, 340)
+X_valid = img2array(unet_tiling(img))
+y_valid = img2array(label)
 
-loss(X, y)
+evalcb = () -> @show loss(X_valid, y_valid)
 
-opt = ADAM(0.0003)
-
-tx, ty = dataset[1]
-evalcb = () -> @show loss(tx, ty)
-
-@progress for i = 0:1
+@progress for i = 0:5
     @info "Epoch $i"
     Flux.train!(loss, params(unet), dataset, opt, cb = evalcb)
 end
 
-function plot_y(y)
-    convert(
-        Array{Gray{Normed{UInt8,8}},2},
-        reshape(y.data, size(y)[1], size(y)[2])
-    )
-end
+weights = params(unet)
+@save "unet_weights.jld2" weights
 
-function plot_y(y::Array{Float32,4})
-    convert(
-        Array{Gray{Normed{UInt8,8}},2},
-        reshape(y, size(y)[1], size(y)[2])
-    )
-end
+# ---------------------------------------------
+# And now, we can do some inference at last
+# ---------------------------------------------
 
-using JLD2
 @load "unet_weights.jld2" weights
 Flux.loadparams!(unet, weights)
 
+img, label = load_img_label(21)
+y_pred = unet(img2array(unet_tiling(img)))
 
-X, y = get_Xy_train(18)
-y_pred = unet(X)
-plot_y(X)
-plot_y(y)
-plot_y(y_pred)
+img_pred = array2img(y_pred)
