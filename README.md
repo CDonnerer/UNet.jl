@@ -35,7 +35,7 @@ img = unet_tiling(img)
 
 # finally, we can do inference
 y_pred = unet(img2array(img))
-500x500x1x1 Array{Float32,4}
+500×500×1×1 Array{Float32,4}
 
 # show the output
 array2img(y_pred)
